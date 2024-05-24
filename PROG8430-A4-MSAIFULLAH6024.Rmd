@@ -1,0 +1,430 @@
+---
+title: "PROG8430-Assignment 4"
+author: "Mohammed Saifullah"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Setting the working directory
+knitr::opts_knit$set(root.dir = 'E:/Big Data Solution Architecture/PROG8430 - Data Analysis Mathematics, Algorithms and Modeling/Assignment 4')
+```
+
+
+```{r cleanup, include=FALSE}
+#Clearing all the Plots, Console and workspace and setting overall number format
+if(!is.null(dev.list())) dev.off()
+cat("\014") 
+rm(list=ls())
+options(scipen=9)
+```
+Loading necessary packages
+
+```{r}
+#Load packages
+if(!require(pastecs)){install.packages("pastecs")}
+library("pastecs")
+
+if(!require(lattice)){install.packages("lattice")}
+library("lattice")
+
+if(!require(tinytex)){install.packages("tinytex")}
+library("tinytex")
+
+if(!require(corrgram)){install.packages("corrgram")}
+library("corrgram")
+
+
+```
+
+
+# **Part 1 - Preliminary and Exploratory**
+
+##1.1 Appending initials to all column names  
+
+```{r}
+getwd() #verify working directory
+#Read the text data file into a Data Frame
+MailOrder_MS <- read.table("PROG8430_Assign04_23W.txt", sep=',', header = TRUE)
+#concatenating initial 'MS' to all column names
+colnames(MailOrder_MS) <- paste(colnames(MailOrder_MS), "MS", sep = "_")
+#Display first 5 rows of the dataset just to verify loading and name transformation is  successful
+head(MailOrder_MS, 5)
+#Transform String as Factor variable
+MailOrder_MS <- as.data.frame(unclass(MailOrder_MS), stringsAsFactors = TRUE)
+#Checking Data Structure
+str(MailOrder_MS)
+
+```
+##1.2 Examining the Data
+
+Checking data Summary and stat
+```{r}
+summary(MailOrder_MS)
+stat.desc(MailOrder_MS)
+```
+**Interpretation:**
+Minimum Package Ordered(PG_MS) is -2, which can not be correct.
+
+Checking Outlier with boxplots and desnisy plots
+
+```{r}
+# Box Plots to check outliers
+boxplot(MailOrder_MS$DL_MS, horizontal = TRUE, pch = 20,
+        main="Box Plot of Delivery Time",
+        xlab="DeliveryTime")
+#display values on the boxplot
+text(x=fivenum(MailOrder_MS$DL_MS), labels=fivenum(MailOrder_MS$DL_MS), y=1.25)
+
+boxplot(MailOrder_MS$VN_MS, horizontal = TRUE, pch = 20,
+        main="Box Plot of Product Vintage",
+        xlab="Product Vintage")
+#display values on the boxplot
+text(x=fivenum(MailOrder_MS$VN_MS), labels=fivenum(MailOrder_MS$VN_MS), y=1.25)
+
+#Outliar in Packages Ordered, -2
+boxplot(MailOrder_MS$PG_MS, horizontal = TRUE, pch = 20,
+        main="Box Plot of Product Packages Ordered",
+        xlab="Product Packages")
+#display values on the boxplot
+text(x=fivenum(MailOrder_MS$PG_MS), labels=fivenum(MailOrder_MS$PG_MS), y=1.25)
+
+boxplot(MailOrder_MS$CS_MS, horizontal = TRUE, pch = 20,
+        main="Box Plot of Past Customer Order",
+        xlab="Customer Order")
+#display values on the boxplot
+text(x=fivenum(MailOrder_MS$CS_MS), labels=fivenum(MailOrder_MS$CS_MS), y=1.25)
+
+boxplot(MailOrder_MS$ML_MS, horizontal = TRUE, pch = 20,
+        main="Box Plot of Delivery Distance",
+        xlab="Delivery Distance")
+#display values on the boxplot
+text(x=fivenum(MailOrder_MS$ML_MS), labels=fivenum(MailOrder_MS$ML_MS), y=1.25)
+
+boxplot(MailOrder_MS$WT_MS, horizontal = TRUE, pch = 20,
+        main="Box Plot of Shipment Weight",
+        xlab="Shipment Weight")
+#display values on the boxplot
+text(x=fivenum(MailOrder_MS$WT_MS), labels=fivenum(MailOrder_MS$WT_MS), y=1.25)
+
+```
+**Interpretation:**  
+Clearly Package Ordered has an outlier at -2. Packages ordered should not be negative.
+
+Checking Density plots
+```{r}
+densityplot(~ MailOrder_MS$DL_MS, pch = 20,
+            main="Density Plot of Delivery Time",
+            xlab="Delivery Time")
+densityplot(~ MailOrder_MS$VN_MS, pch = 20,
+            main="Density Plot of Product Vintage",
+            xlab="Product Vintage")
+densityplot(~ MailOrder_MS$PG_MS, pch = 20,
+            main="Density Plot of Package of Product Ordered",
+            xlab="Package Ordered")
+densityplot(~ MailOrder_MS$CS_MS, pch = 20,
+            main="Density Plot of Past Customer Order",
+            xlab="Customer Order")
+densityplot(~ MailOrder_MS$ML_MS, pch = 20,
+            main="Density Plot of Delivery Distance",
+            xlab="Delivery Distance")
+densityplot(~ MailOrder_MS$WT_MS, pch = 20,
+            main="Density Plot of Shipment Weight",
+            xlab="Shipment Weight")
+
+```
+**Interpretation:** 
+Data looks reasonable except an outlier in Product Order. 
+Removing the Outlier. 
+Density plot before and after removing the outlier. 
+
+```{r}
+densityplot(~ MailOrder_MS$PG_MS, pch = 20,
+            main="Density Plot of Package Ordered - Before Adjustment",
+            xlab="Package Ordered")
+nr_ms <- which(MailOrder_MS$PG_MS == min(MailOrder_MS$PG_MS)) #Row number for the minimum value
+MailOrder_MS <- MailOrder_MS[-c(nr_ms),]
+densityplot(~ MailOrder_MS$PG_MS, pch = 20,
+            main="Density Plot of Package Ordered - After Adjustment",
+            xlab="Package Ordered")
+
+```
+##1.3 Delivery time comparison between Careers
+Assumptions:
+Data is Independent
+Data is normally distributed 
+Variance is unknown, but equal 
+
+We can conduct a hypothesis testing to determine if one Carrier has faster delivery times than the other. The flow chart that was discussed in class can help to determine which test to conduct.
+Since the outcome is continuous we should go for mean comparison test. First we can conduct shapiro test and Q-Q plot to check if data is normal.
+
+```{r}
+shapiro.test(MailOrder_MS$DL_MS)
+
+qqnorm(MailOrder_MS$DL_MS, main="Is Delivery Time Normal?", pch=20)
+qqline(MailOrder_MS$DL_MS)
+
+var.test(DL_MS ~ CR_MS, data = MailOrder_MS) 
+
+```
+**Interpretation:** 
+Since p-value from shapiro test is grater than 0.05, also checking the Q-Q normal plot we can accept the hypothesis that distribution is normal. 
+
+p-value of grater than 0.05 in F-test confirms that variances are equal. 
+
+Above tests meets our assumptions and we can select t-test to check if one Career has faster delivery times than other. 
+
+```{r}
+
+t.test(DL_MS ~ CR_MS, data = MailOrder_MS, var.equal = TRUE)
+
+```
+**Interpretation:** 
+Since p-value of t-test is less than 0.05 we can reject the null hypothesis that means are equal and accept the alternate hypothesis, conclude that one Career has faster delivery times than other. We cannot conclude which career is faster than other.
+
+The confidence interval is -1.3544364 and -0.7550164 of mean between 'Def Post' and 'Sup Del'. We can be 95% confident that the true difference in mean between 'Def Post' and 'Sup Del' is within this interval.
+
+##1.4 Split the data set into Training and Test set
+
+```{r}
+#Choosing sampling rate for training data
+sr_ms <- 0.8 #80% in training set
+
+# Finding the number of rows of data
+n.row <- nrow(MailOrder_MS) #counting number of rows
+
+#Choose the rows for the training sample 
+
+set.seed(6024) #setting a seed, same starting point. Last 4 digits of my student ID
+training.rows <- sample(1:n.row, sr_ms*n.row, replace=FALSE) #sampling 
+#selecting from 1 to no of rows, how much - sampling-rate*no or rows, placement equal false - don't want to replace
+
+#Assigning to the training sample
+train_ms <- subset(MailOrder_MS[training.rows,]) #creating training data set, only keeping training rows
+
+# Assign the balance to the Test Sample
+
+test_ms <- subset(MailOrder_MS[-c(training.rows),]) #keeping everything except training rows
+
+#Checking Train and Test datasets
+head(training.rows)
+head(train_ms)
+head(test_ms)
+
+summary(MailOrder_MS)
+summary(test_ms)
+summary(train_ms)
+
+```
+# **Part 2 - Simple Linear Regression**
+##2.1 - Correlations
+Using correlation matrix and corrgram to determine correlation between numeric variables.
+
+
+```{r}
+
+#Numeric Correlation
+trnCr_MS <- cor(train_ms[-c(6:8)], method="spearman") #Excluding non numeric columns for correlation
+round(trnCr_MS, 2)
+
+#Graphical Correlation
+pairs(trnCr_MS)
+
+corrgram(train_ms, order=TRUE, lower.panel=panel.shade,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Mailorder Correlations")
+
+
+```
+**Interpretation:** 
+Reviewing the correlation matrix and corregram we can conclude that there is moderate positive correlation between Time for Delivery and Packages of product ordered. This make sense probably larger order takes priority and delivered faster. 
+
+There is also moderate negative correlation between Time for Delivery and Weight of the shipment. This also make sense as heavy weight shipment takes more processing time and increases delivery time.
+
+
+##2.2 
+Creating a simple linear regression model using time for delivery as the dependent variable and weight of the shipment as the independent.
+
+```{r}
+MailorderModel1_MS <- lm(DL_MS ~ WT_MS, data=MailOrder_MS) #Model 1
+MailorderModel1_MS 
+
+plot(DL_MS ~ WT_MS, data=MailOrder_MS,
+     main="Delivery by Shipment Weight",
+     xlab = "Weitht of the Shipment",
+     ylab = "Time for delivery")
+abline(MailorderModel1_MS)
+
+summary(MailorderModel1_MS)
+
+```
+##2.3 
+Creating a simple linear regression model using time for delivery as the dependent variable and distance the shipment needs to travel as the independent.
+
+```{r, warning=FALSE}
+MailorderModel2_MS <- lm(DL_MS ~ ML_MS, data=MailOrder_MS) #Model 2
+MailorderModel2_MS 
+
+plot(DL_MS ~ ML_MS, data=MailOrder_MS,
+     main="Delivery by Distance",
+     xlab = "Distance",
+     ylab = "Time for delivery")
+abline(MailorderModel2_MS)
+
+summary(MailorderModel2_MS)
+
+
+### Comparing the RMSE
+#Model 1 RMSE
+print("Model 1 RMSE: ")
+M1pred_MS <- predict(MailorderModel1_MS, newdata=train_ms)
+
+RMSE_trnM1_MS <- sqrt(mean((MailOrder_MS$WT_MS - M1pred_MS)^2))
+round(RMSE_trnM1_MS,3)
+
+M1pred_MS <- predict(MailorderModel1_MS, newdata=test_ms)
+
+RMSE_tstM1_MS <- sqrt(mean((MailOrder_MS$WT_MS - M1pred_MS)^2))
+round(RMSE_tstM1_MS,3)
+
+#Model 2 RMSE
+print("Model 2 RMSE: ")
+M1pred_MS <- predict(MailorderModel2_MS, newdata=train_ms)
+
+RMSE_trnM1_MS <- sqrt(mean((MailOrder_MS$WT_MS - M1pred_MS)^2))
+round(RMSE_trnM1_MS,3)
+
+M1pred_MS <- predict(MailorderModel2_MS, newdata=test_ms)
+
+RMSE_tstM1_MS <- sqrt(mean((MailOrder_MS$WT_MS - M1pred_MS)^2))
+round(RMSE_tstM1_MS,3)
+
+
+```
+##2.4 Model comparison
+
+Comparing following 5 measures for both models.
+
+a. F-Stat - p-value for both model is less than 0.05
+b. Adjusted R-squared - comparing values for both model (0.1434 and 0.01634), model1 seems better
+c. Residuals for both models are centered around 0 and symmetric
+d. t-test value for both WT and ML is less than 0.05, so both passed
+e. Coefficient - looks reasonable
+f. RMSE are almost same for both models
+
+Based on above comparison I conclude that both models are not good enough. Just based on Adjusted R-squared, Model1 is superior than Model2.
+
+# **Part 3 - Multiple Linear Regression**
+
+Creating a full model using all the variables.
+
+```{r, warning=FALSE}
+full.model_ms = lm(DL_MS ~ . , data=train_ms, na.action=na.omit) #. means every other variable
+
+summary(full.model_ms )
+
+pred_ms <- predict(full.model_ms , newdata=train_ms)
+
+RMSE_trn_full_ms <- sqrt(mean((train_ms$DL_MS - pred_ms)^2))
+round(RMSE_trn_full_ms,2)
+
+RMSE_tst_full_ms <- sqrt(mean((test_ms$DL_MS - pred_ms)^2))
+round(RMSE_tst_full_ms,2)
+
+```
+**Interpretation:** 
+Comparing following 5 measures for full model.
+
+a. F-Stat - p-value for full model is less than 0.05.
+b. Adjusted R-squared - value of 0.4964 indicate a moderate model not excellent.
+c. Residuals - Residuals are centered around 0 and symmetric.
+d. t-test - 5/8 variable has less than 0.05 t value, so 5 variable out of 8 passed t-test.
+e. Coefficient - coefficients looks reasonable
+f. RMSE - train RMSE of 1.19 is less than test RMSE of 2.16, so this model is over fitted.
+
+
+Creating a model using backward selection.
+
+```{r, warning=FALSE}
+back.model_ms = step(full.model_ms, direction="backward", details=TRUE)
+
+summary(back.model_ms)
+
+pred_ms <- predict(back.model_ms, newdata=train_ms)
+
+RMSE_trn_back_ms <- sqrt(mean((train_ms$DL_MS - pred_ms)^2))
+round(RMSE_trn_back_ms,2)
+
+RMSE_tst_back_ms <- sqrt(mean((test_ms$DL_MS - pred_ms)^2))
+round(RMSE_tst_back_ms,2)
+
+
+```
+
+
+**Interpretation:** 
+Comparing following 5 measures for backward model.
+
+a. F-Stat - p-value for backward selection model is less than 0.05.
+b. Adjusted R-squared - value of 0.4961 indicate a moderate model not excellent.
+c. Residuals - Residuals are centered around 0 and symmetric.
+d. t-test - 5/7 variable has less than 0.05 t value, so 5 variable out of 7 passed t-test.
+e. Coefficient - Coefficients looks reasonable
+f. RMSE - train RMSE of 1.19 is less than test RMSE of 2.16, so this model is over fitted.
+
+# **Part 4 - Model Evaluation**
+Evaluating main assumptions of regression.
+Checking for Error Terms, Constant variance, normal distribution and independence of predictors
+
+
+```{r}
+#Checking for Linearity
+par(mfrow = c(2, 2)) 
+plot(full.model_ms)
+par(mfrow = c(1, 1)) 
+
+par(mfrow = c(2, 2)) 
+plot(back.model_ms)
+par(mfrow = c(1, 1)) 
+
+#Checking for Normality
+full.res_ms <- residuals(full.model_ms)
+back.res_ms <- residuals(back.model_ms)
+
+shapiro.test(full.res_ms)
+shapiro.test(back.res_ms)
+
+
+```
+**Interpretation:** 
+Evaluating main assumptions of regression:
+
+Linearity: The residuals are evenly distributed around zero for both models. Linearity assumption is met.
+
+Normality: Reviewing the Q-Q plot we see the residuals are approximately normally distributed for both models.Normality assumption is met.
+
+Homoscedasticity: Reviewing the residual vs fitted plot of the residuals against the predicted values for both models we see that the residuals are evenly distributed around zero and there is no clear pattern in the plot, the assumption is met.
+
+Independence: Observing the Scale-Location graph for both models we see there is no clear pattern in the plot, the assumption is met.
+
+Resuduals vs Leverage: Within Cook's distance with high leverage and low influence for both models. No significant influential value.
+
+
+# **Part 5 - Final Recommendation**
+Two models created in part 3 has similar test results for all tests except t-test. For full model 5/8 variables passed t-test on the other hand 5/7 variable passed for backward selection model. Backward selection model is providing more accurate result using less variables. So we can suggest that backward model is superior than full model.
+
+
+
+Final Results, append and write out predictions
+```{r}
+
+#If the test file is provided read the test file and generate prediction
+pred <- predict(back.model_ms, newdata=test_ms)
+
+test_final <- cbind(test_ms, pred)
+head(test_final)
+
+write.csv(test_final, "Final_Submission_MS.txt")
+
+```
